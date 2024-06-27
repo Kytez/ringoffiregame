@@ -9,6 +9,8 @@ import { DialogAddPlayerComponent } from '../dialog-add-player/dialog-add-player
 import { MatDialogModule } from '@angular/material/dialog';
 import { GameInfoComponent } from '../game-info/game-info.component';
 import { FirebaseService } from '../firebase-service/firebase.service';
+import { ActivatedRoute } from '@angular/router';
+import { DocumentReference } from '@angular/fire/firestore';
 
 @Component({
   selector: 'app-game',
@@ -27,29 +29,43 @@ import { FirebaseService } from '../firebase-service/firebase.service';
   styleUrl: './game.component.scss',
 })
 export class GameComponent {
-  pickCardAnimation = false;
+  game!: Game;
   currentCard: string | undefined = '';
-  game: Game;
+  pickCardAnimation = false;
+  firestore = this.firebaseService.firestore;
+  loadedGame!: DocumentReference;
+  gameId!: string;
 
-  constructor(public dialog: MatDialog, private firebaseService: FirebaseService) {
-    this.newGame();
+  constructor(public dialog: MatDialog, private firebaseService: FirebaseService, private route: ActivatedRoute) {
+    this.route.params.subscribe((params) => {
+      this.firebaseService.getSingleGameRef(params['id']);
+      this.gameId = params['id'];
+      
+      setTimeout(() => {
+        this.game = this.firebaseService.singleGame[0];
+      },1000);       
+    });    
   }
 
   newGame() {
     this.game = new Game();
+    this.firebaseService.addGame(this.game);
   }
 
   takeCard() {
     if (!this.pickCardAnimation) {
-      this.currentCard = this.game.stack.pop();
+      let card = this.game.stack.pop();
+      if (card != undefined) {
+        this.currentCard = card;
+      }
       this.pickCardAnimation = true;
-
-      this.game.currentPlayer++;
-      this.game.currentPlayer = this.game.currentPlayer % this.game.players.length;
 
       setTimeout(() => {
         this.game.playedCards.push(this.currentCard);
         this.pickCardAnimation = false;
+        this.game.currentPlayer++;
+        this.game.currentPlayer = this.game.currentPlayer % this.game.players.length;
+        this.firebaseService.updateGame(this.gameId, this.game);
       }, 1000);
     }
   }
@@ -58,9 +74,8 @@ export class GameComponent {
     const dialogRef = this.dialog.open(DialogAddPlayerComponent);
 
     dialogRef.afterClosed().subscribe((name: string) => {
-      if(name && name.length > 0) {
-        this.game.players.push(name);
-      }
+      if (name != '') this.game.players.push(name);
+        this.firebaseService.updateGame(this.gameId, this.game);
     });
   }
 }
